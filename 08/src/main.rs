@@ -79,8 +79,8 @@ fn main() {
         }
     }
 
-    println!("Current max value: {:?}", current_max);
-    println!("Max value ever: {:?}", max);
+    println!("1: {:?}", current_max);
+    println!("2: {:?}", max);
 }
 
 

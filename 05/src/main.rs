@@ -7,25 +7,33 @@ fn main() {
         .map(|x| x.unwrap().parse().unwrap())
         .collect();
 
-    println!("jumps: {}", execute(jumps));
+    let count1 = execute(jumps.clone(), |_offset, j| {
+        *j += 1;
+    });
+    println!("1: {}", count1);
+
+    let count2 = execute(jumps, |offset, j| {
+        if offset >= 3 {
+            *j -= 1;
+        } else {
+            *j += 1;
+        }
+    });
+    println!("2: {}", count2);
 }
 
-fn execute(mut j: Vec<isize>) -> usize {
-    let mut jumps = 0;
-    let mut program_counter = 0;
-    while program_counter < j.len() {
-        jumps += 1;
-        let offset = j[program_counter];
-        if offset >= 3 {
-            j[program_counter] -= 1;
+fn execute<F: Fn(isize, &mut isize)>(mut j: Vec<isize>, modifier: F) -> usize {
+    let mut count = 0;
+    let mut pc = 0;
+    while pc < j.len() {
+        count += 1;
+        let offset = j[pc];
+        modifier(offset, &mut j[pc]);
+        pc = if offset < 0 {
+            pc - (-offset) as usize
         } else {
-            j[program_counter] += 1;
-        }
-        program_counter = if offset < 0 {
-            program_counter - (-offset) as usize
-        } else {
-            program_counter + offset as usize
+            pc + offset as usize
         };
     }
-    jumps
+    count
 }

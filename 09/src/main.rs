@@ -39,5 +39,6 @@ fn main() {
         }
     }
 
-    println!("score: {} garbage: {}", score, garbage_count);
+    println!("1: {}", score);
+    println!("2: {}", garbage_count);
 }
