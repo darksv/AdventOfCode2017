@@ -1,4 +1,5 @@
 #![feature(ascii_ctype)]
+#![feature(entry_and_modify)]
 
 #[derive(Clone, Debug)]
 struct Node {
@@ -8,118 +9,143 @@ struct Node {
     weight: Option<usize>,
 }
 
+struct Tree {
+    nodes: Vec<Node>,
+}
+
+impl Tree {
+    fn new() -> Self {
+        Tree {
+            nodes: vec![],
+        }
+    }
+
+    fn insert(&mut self, name: &str) -> usize {
+        self.nodes
+            .iter()
+            .position(|x| x.name == name)
+            .unwrap_or_else(|| {
+                let index = self.nodes.len();
+                self.nodes.push(Node {
+                    weight: None,
+                    children: vec![],
+                    ancestor: None,
+                    name: name.to_owned(),
+                });
+                index
+            })
+    }
+
+    fn find_root<'a>(&'a self) -> Option<(usize, &'a Node)> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .find(|&(_, node)| node.ancestor.is_none())
+    }
+}
+
 fn main() {
     use std::io::BufRead;
 
-    let mut nodes = vec![];
+    let mut tree = Tree::new();
 
     let file = std::fs::File::open("input.txt").unwrap();
     for line in std::io::BufReader::new(file).lines() {
         let line = line.unwrap();
         let (node_name, node_weight, node_children) = parse_line(&line);
-        let ancestor = insert_node(&mut nodes, node_name);
+        let ancestor = tree.insert(node_name);
 
         let mut children = vec![];
         for node_name in node_children {
-            let child = insert_node(&mut nodes, node_name);
+            let child = tree.insert(node_name);
             children.push(child);
-            nodes[child].ancestor = Some(ancestor);
+            tree.nodes[child].ancestor = Some(ancestor);
         }
 
-        let node = &mut nodes[ancestor];
+        let node = &mut tree.nodes[ancestor];
         node.weight = Some(node_weight);
         node.children = children;
     }
 
-    let (index, node) = nodes
-        .iter()
-        .enumerate()
-        .find(|&(_, node)| node.ancestor.is_none())
-        .unwrap();
-
-    println!("root: {:?} {:?}", &node, get_fixed_weight(&nodes, index));
+    if let Some((index, node)) = tree.find_root() {
+        println!("1: {}", &node.name);
+        println!("2: {}", find_invalid_weight(&tree.nodes, index).unwrap());
+    }
 }
 
-fn count_weight(nodes: &Vec<Node>, root: usize) -> (usize, usize) {
+fn find_invalid_weight(nodes: &Vec<Node>, root: usize) -> Option<usize> {
+    match check_balance(nodes, root) {
+        BalanceResult::NotBalanced { required_self_weight } => Some(required_self_weight),
+        _ => None,
+    }
+}
+
+#[derive(Debug)]
+enum BalanceResult {
+    Balanced {
+        self_weight: usize,
+        children_weight: usize,
+    },
+    NotBalanced {
+        required_self_weight: usize,
+    }
+}
+
+fn check_balance(nodes: &Vec<Node>, root: usize) -> BalanceResult {
     let node = nodes.get(root).unwrap();
 
     let mut sum_weight = 0;
     let mut weights = vec![];
     for child in &node.children {
-        let (self_weight, children_weight) = count_weight(nodes, *child);
-        let weight = self_weight + children_weight;
-        weights.push((weight, self_weight));
-        sum_weight += weight;
-    }
-
-    if !weights.iter().zip(weights.iter().skip(1)).all(|(a, b)| a.0 == b.0) {
-        println!("{} {} {} {:?}", node.weight.unwrap_or(0) + sum_weight, node.weight.unwrap_or(0), sum_weight, weights);
-    }
-
-    (node.weight.unwrap_or(0), sum_weight)
-}
-
-fn get_fixed_weight(nodes: &Vec<Node>, root: usize) -> Option<usize> {
-    // BFS algorithm, don't have to care about breaking cycles since won't have one...
-//    let mut current_anc = root;
-
-    let mut indents = std::collections::HashMap::new();
-    indents.insert(root, 0);
-
-    let mut queue = std::collections::VecDeque::new();
-    queue.push_front(root);
-
-//    let mut a = None;
-//
-//    let mut m = vec![];
-
-    while let Some(index) = queue.pop_back() {
-        let indent: usize = *indents.get(&index).unwrap();
-        let current = &nodes[index];
-
-//        if a == Some(index) {
-//            m.push(index);
-//        }else {
-//            a = Some(index);
-//            m.clear();
-//            m.push(index);
-//        }
-
-
-        for _ in 0..indent {
-            print!(" ");
+        match check_balance(nodes, *child) {
+            BalanceResult::Balanced { self_weight, children_weight } => {
+                let weight = self_weight + children_weight;
+                weights.push((weight, self_weight));
+                sum_weight += weight;
+            }
+            result @ _ => return result
         }
-
-        println!("{} ({})", current.name, current.weight.unwrap_or(0));
-        for c in &current.children {
-            indents.insert(*c, indent + 1);
-
-
-
-            queue.push_front(*c);
-        }
-
-//        println!("{:?}", m);
     }
 
-    Some(root)
-}
+    let mut w = std::collections::HashMap::with_capacity(2);
+    for &(weight, _self_weight) in &weights {
+        w.entry(weight)
+            .and_modify(|e| *e += 1)
+            .or_insert(1);
+    }
 
+    if w.len() <= 1 {
+        return BalanceResult::Balanced {
+            self_weight: node.weight.unwrap_or(0),
+            children_weight: sum_weight,
+        };
+    } else if w.len() > 2 {
+        panic!("more than one node has different weight");
+    }
 
-fn insert_node(nodes: &mut Vec<Node>, name: &str) -> usize {
-    nodes
+    let actual_total_weight = w
         .iter()
-        .position(|x| x.name == name)
-        .unwrap_or_else(|| {
-            let index = nodes.len();
-            nodes.push(Node {
-                weight: None,
-                children: vec![],
-                ancestor: None,
-                name: name.to_owned(),
-            });
-            index
-        })
+        .find(|&x| x.1 == &1)
+        .map(|x| x.0)
+        .unwrap();
+
+    let required_total_weight = w
+        .keys()
+        .find(|&x| x != actual_total_weight)
+        .unwrap();
+
+    let &(_, current_self_weight) = weights
+        .iter()
+        .find(|&&(weight, _)| weight == *actual_total_weight)
+        .unwrap();
+
+    let required_self_weight = if required_total_weight > actual_total_weight {
+        current_self_weight + (required_total_weight - actual_total_weight)
+    } else {
+        current_self_weight - (actual_total_weight - required_total_weight)
+    };
+
+    BalanceResult::NotBalanced { required_self_weight }
 }
 
 fn parse_line<'a>(line: &'a str) -> (&'a str, usize, Vec<&'a str>) {
