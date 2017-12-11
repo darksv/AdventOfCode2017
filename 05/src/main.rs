@@ -22,13 +22,15 @@ fn main() {
     println!("2: {}", count2);
 }
 
-fn execute<F: Fn(isize, &mut isize)>(mut j: Vec<isize>, modifier: F) -> usize {
+fn execute<F>(mut jumps: Vec<isize>, modifier: F) -> usize
+    where F: Fn(isize, &mut isize)
+{
     let mut count = 0;
     let mut pc = 0;
-    while pc < j.len() {
+    while pc < jumps.len() {
         count += 1;
-        let offset = j[pc];
-        modifier(offset, &mut j[pc]);
+        let offset = jumps[pc];
+        modifier(offset, &mut jumps[pc]);
         pc = if offset < 0 {
             pc - (-offset) as usize
         } else {

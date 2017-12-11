@@ -41,13 +41,13 @@ fn redistribute(blocks: &mut Vec<usize>, from: usize) {
     }
 }
 
-fn first_index_of_max<T: PartialOrd + Copy>(items: &Vec<T>) -> Option<usize> {
-    if items.is_empty() {
+fn first_index_of_max<T: PartialOrd + Copy>(numbers: &Vec<T>) -> Option<usize> {
+    if numbers.is_empty() {
         return None;
     }
     let mut max_index = 0;
-    let mut max_value = items[0];
-    for (index, &value) in items.iter().enumerate() {
+    let mut max_value = numbers[0];
+    for (index, &value) in numbers.iter().enumerate() {
         if value > max_value {
             max_index = index;
             max_value = value;
@@ -56,12 +56,12 @@ fn first_index_of_max<T: PartialOrd + Copy>(items: &Vec<T>) -> Option<usize> {
     Some(max_index)
 }
 
-fn are_slices_equal<T: PartialEq>(a: &[T], b: &[T]) -> bool {
-    if a.len() != b.len() {
+fn are_slices_equal<T: PartialEq>(first: &[T], seconds: &[T]) -> bool {
+    if first.len() != seconds.len() {
         return false;
     }
-    a
+    first
         .iter()
-        .zip(b.iter())
+        .zip(seconds.iter())
         .all(|(ref a, ref b)| a == b)
 }
