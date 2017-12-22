@@ -1,6 +1,8 @@
 fn main() {
     let board = read_board();
-    println!("1: {}", follow(&board).iter().collect::<String>());
+    let (steps, letters) = follow(&board);
+    println!("1: {}", letters.iter().collect::<String>());
+    println!("2: {}", steps);
 }
 
 fn read_board() -> Vec<Vec<char>> {
@@ -22,97 +24,109 @@ enum Dir {
     Up,
 }
 
-fn follow(board: &Vec<Vec<char>>) -> Vec<char> {
+fn follow(board: &Vec<Vec<char>>) -> (usize, Vec<char>) {
     let mut x = board[0].iter().position(|&x| x == '|').unwrap();
     let mut y = 0usize;
     let mut dir = Dir::Down;
 
     let mut letters = vec![];
-//    let mut steps = 0;
+    let mut steps = 0;
     loop {
         match dir {
             Dir::Down => {
                 loop {
                     match board[y][x] {
                         '+' => break,
-                        ' ' => return letters,
+                        ' ' => return (steps, letters),
                         letter @ 'A' ... 'Z' => {
                             letters.push(letter);
                         }
                         _ => ()
                     }
                     y += 1;
+                    steps += 1;
                 }
 
                 if board[y][x - 1] == '-' {
                     dir = Dir::Left;
                     x -= 1;
+                    steps += 1;
                 } else if board[y][x + 1] == '-' {
                     dir = Dir::Right;
                     x += 1;
+                    steps += 1;
                 }
             }
             Dir::Left => {
                 loop {
                     match board[y][x] {
                         '+' => break,
-                        ' ' => return letters,
+                        ' ' => return (steps, letters),
                         letter @ 'A' ... 'Z' => {
                             letters.push(letter);
                         }
                         _ => ()
                     }
                     x -= 1;
+                    steps += 1;
                 }
 
                 if board[y - 1][x] == '|' {
                     dir = Dir::Up;
                     y -= 1;
+                    steps += 1;
                 } else if board[y + 1][x] == '|' {
                     dir = Dir::Down;
                     y += 1;
+                    steps += 1;
                 }
             }
             Dir::Up => {
                 loop {
                     match board[y][x] {
                         '+' => break,
-                        ' ' => return letters,
+                        ' ' => return (steps, letters),
                         letter @ 'A' ... 'Z' => {
                             letters.push(letter);
                         }
                         _ => ()
                     }
                     y -= 1;
+                    steps += 1;
                 }
 
                 if board[y][x - 1] == '-' {
                     dir = Dir::Left;
                     x -= 1;
+                    steps += 1;
                 } else if board[y][x + 1] == '-' {
                     dir = Dir::Right;
                     x += 1;
+                    steps += 1;
                 }
             }
             Dir::Right => {
                 loop {
                     match board[y][x] {
                         '+' => break,
-                        ' ' => return letters,
+                        ' ' => return (steps, letters),
                         letter @ 'A' ... 'Z' => {
                             letters.push(letter);
                         }
                         _ => ()
                     }
                     x += 1;
+                    steps += 1;
                 }
 
                 if board[y - 1][x] == '|' {
                     dir = Dir::Up;
                     y -= 1;
+                    steps += 1;
                 } else if board[y + 1][x] == '|' {
                     dir = Dir::Down;
                     y += 1;
+                    steps += 1;
                 }
             }
         }
