@@ -1,11 +1,96 @@
 fn main() {
     let code = read_instructions();
     println!("1: {}", execute_simple(&code));
+    println!("2: {}", execute_advanced(&code));
 }
 
 fn execute_simple(code: &[Inst]) -> isize {
-    let mut regs = vec![0isize; 26];
-    execute(&code, &mut regs).unwrap_or(0)
+    let mut regs = init_regs(0);
+    let mut machine = Machine::new(&mut regs, code);
+
+    let mut last_snd = None;
+    while machine.has_next() {
+        match machine.step() {
+            StepResult::Ok => (),
+            StepResult::Send(val) => {
+                last_snd = Some(val);
+            }
+            StepResult::Receive(r) => {
+                let last_snd = last_snd.unwrap_or(0);
+                if last_snd != 0 {
+                    return last_snd;
+                }
+                machine.regs[r as usize] = last_snd;
+            }
+        }
+    }
+    0
+}
+
+fn execute_advanced(code: &[Inst]) -> isize {
+    use std::collections::vec_deque::VecDeque;
+
+    let mut regs1 = init_regs(0);
+    let mut regs2 = init_regs(1);
+
+    let mut machine_1 = Machine::new(&mut regs1, code);
+    let mut machine_2 = Machine::new(&mut regs2, code);
+
+    let mut messages_for_1 = VecDeque::new();
+    let mut messages_for_2 = VecDeque::new();
+
+    let mut message_dst_for_1 = None;
+    let mut message_dst_for_2 = None;
+
+    let mut count = 0;
+    loop {
+        if let Some(reg) = message_dst_for_1 {
+            if let Some(msg) = messages_for_1.pop_back() {
+                machine_1.regs[reg as usize] = msg;
+                message_dst_for_1 = None;
+            }
+        } else if machine_1.has_next() {
+            match machine_1.step() {
+                StepResult::Ok => (),
+                StepResult::Send(val) => {
+                    messages_for_2.push_front(val);
+                }
+                StepResult::Receive(r) => {
+                    message_dst_for_1 = Some(r);
+                }
+            }
+        }
+
+        if let Some(reg) = message_dst_for_2 {
+            if let Some(msg) = messages_for_2.pop_back() {
+                machine_2.regs[reg as usize] = msg;
+                message_dst_for_2 = None;
+            }
+        } else if machine_2.has_next() {
+            match machine_2.step() {
+                StepResult::Ok => (),
+                StepResult::Send(val) => {
+                    messages_for_1.push_front(val);
+                    count += 1;
+                }
+                StepResult::Receive(r) => {
+                    message_dst_for_2 = Some(r);
+                }
+            }
+        }
+
+        // Deadlock detection
+        if message_dst_for_1.is_some() && messages_for_1.is_empty() &&
+            message_dst_for_2.is_some() && messages_for_2.is_empty() {
+            return count;
+        }
+    }
+}
+
+fn init_regs(p: isize) -> [isize; 26] {
+    let mut regs = [0isize; 26];
+    regs[parse_reg("p").unwrap() as usize] = p;
+    regs
 }
 
 #[derive(Debug)]
@@ -77,67 +162,90 @@ fn parse_operand(op: &str) -> Option<Operand> {
     }
 }
 
-fn execute(code: &[Inst], regs: &mut [isize]) -> Option<isize> {
-    let mut last_play = None;
-    let mut pc = 0;
-    while pc < code.len() {
-        match &code[pc] {
-            &Inst::Set(a, b) => {
-                let val = get_value(b, regs);
-                if let Some(r) = get_reg(a, regs) {
+struct Machine<'a> {
+    code: &'a [Inst],
+    regs: &'a mut [isize],
+    pc: usize,
+}
+
+enum StepResult {
+    Ok,
+    Send(isize),
+    Receive(u8),
+}
+
+impl<'a> Machine<'a> {
+    pub fn new(regs: &'a mut [isize], code: &'a [Inst]) -> Self {
+        Self {
+            pc: 0,
+            code,
+            regs,
+        }
+    }
+
+    pub fn step(&mut self) -> StepResult {
+        let mut result = StepResult::Ok;
+        match &self.code[self.pc] {
+            &Inst::Set(x, y) => {
+                let val = self.get_value(y);
+                if let Some(r) = self.get_reg(x) {
                     *r = val;
                 }
             }
-            &Inst::Add(a, b) => {
-                let val = get_value(b, regs);
-                if let Some(r) = get_reg(a, regs) {
+            &Inst::Add(x, y) => {
+                let val = self.get_value(y);
+                if let Some(r) = self.get_reg(x) {
                     *r += val;
                 }
             }
-            &Inst::Mul(a, b) => {
-                let val = get_value(a, regs) * get_value(b, regs);
-                if let Some(r) = get_reg(a, regs) {
+            &Inst::Mul(x, y) => {
+                let val = self.get_value(x) * self.get_value(y);
+                if let Some(r) = self.get_reg(x) {
                     *r = val;
                 }
             }
-            &Inst::Mod(a, b) => {
-                let val = get_value(a, regs) % get_value(b, regs);
-                if let Some(r) = get_reg(a, regs) {
+            &Inst::Mod(x, y) => {
+                let val = self.get_value(x) % self.get_value(y);
+                if let Some(r) = self.get_reg(x) {
                     *r = val;
                 }
             }
-            &Inst::Rcv(a) => {
-                if get_value(a, regs) != 0 {
-                    break;
+            &Inst::Rcv(Operand::Reg(r)) => {
+                result = StepResult::Receive(r);
+            }
+            &Inst::Snd(x) => {
+                result = StepResult::Send(self.get_value(x));
+            }
+            &Inst::Jgz(x, y) => {
+                if self.get_value(x) > 0 {
+                    let offset = self.get_value(y);
+                    self.pc = (self.pc as isize + offset) as usize;
+                    return result;
                 }
             }
-            &Inst::Snd(a) => {
-                last_play = Some(get_value(a, regs));
-            }
-            &Inst::Jgz(a, b) => {
-                if get_value(a, regs) > 0 {
-                    let offset = get_value(b, regs);
-                    pc = (pc as isize + offset) as usize;
-                    continue;
-                }
-            }
+            _ => panic!("invalid instruction")
         }
-        pc += 1;
+        self.pc += 1;
+        result
     }
-    last_play
-}
 
-#[inline]
-fn get_value(o: Operand, regs: &[isize]) -> isize {
-    match o {
-        Operand::Reg(r) => regs[r as usize],
-        Operand::Imm(i) => i,
+    fn has_next(&self) -> bool {
+        self.pc < self.code.len()
     }
-}
 
-fn get_reg<'a>(o: Operand, regs: &'a mut [isize]) -> Option<&'a mut isize> {
-    match o {
-        Operand::Reg(r) => Some(&mut regs[r as usize]),
-        Operand::Imm(_) => None,
+    #[inline]
+    fn get_value(&mut self, o: Operand) -> isize {
+        match o {
+            Operand::Reg(r) => self.regs[r as usize],
+            Operand::Imm(i) => i,
+        }
+    }
+
+    #[inline]
+    fn get_reg(&mut self, o: Operand) -> Option<&mut isize> {
+        match o {
+            Operand::Reg(r) => Some(&mut self.regs[r as usize]),
+            Operand::Imm(_) => None,
+        }
     }
 }
