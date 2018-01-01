@@ -1,0 +1,7 @@
+[package]
+name = "aoc_2017_20"
+version = "0.1.0"
+authors = ["Niedoba Dariusz <darek969-12@o2.pl>"]
+
+[dependencies]
+num = "*"
